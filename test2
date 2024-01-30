@@ -1,0 +1,62 @@
+import whisper
+from google.colab import drive, auth
+from googleapiclient.discovery import build
+from datetime import datetime
+import os
+
+# Autenticación con Google y montar Google Drive
+auth.authenticate_user()
+drive.mount('/content/drive')
+
+# Cargar el modelo de Whisper
+model = whisper.load_model("medium")
+
+# Ruta a la carpeta que contiene los audios en Google Drive
+audio_folder_path = "/content/drive/My Drive/Audios/"  # Asegúrate de ajustar esto a tu ruta
+
+# Listar los archivos en la carpeta de audio y mostrarlos al usuario
+audio_files = os.listdir(audio_folder_path)
+print("Archivos disponibles para transcribir:")
+for idx, file in enumerate(audio_files, start=1):
+    print(f"{idx}. {file}")
+
+# Pedir al usuario que seleccione los archivos a transcribir
+selected_files_indexes = input("Ingresa los números de los archivos a transcribir, separados por comas: ")
+selected_files = [audio_files[int(idx) - 1] for idx in selected_files_indexes.split(',')]
+
+# Crear un servicio de Google Docs
+docs_service = build('docs', 'v1')
+document_id = '1EFxcYN47PnMMwTwbvE5Inmwh9YNfAoAP2CDGh_ODgEc'  # Cambia esto por el ID de tu documento
+
+# Procesar los archivos seleccionados
+for audio_file in selected_files:
+    audio_path = os.path.join(audio_folder_path, audio_file)
+    resultado = model.transcribe(audio_path)
+    texto_transcrito = resultado["text"]
+
+    # Obtener la fecha y hora actuales
+    fecha_hora_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    texto_insertar = f"Fecha y hora de la transcripción: {fecha_hora_actual}\n\n{texto_transcrito}\n\n"
+
+    # Obtener el documento actual para calcular la longitud
+    documento = docs_service.documents().get(documentId=document_id).execute()
+    longitud_documento = len(documento.get('body').get('content'))
+
+    # Preparar el contenido a agregar al final del documento
+    requests = [
+        {
+            'insertText': {
+                'location': {
+                    'index': longitud_documento - 1,
+                },
+                'text': texto_insertar
+            }
+        },
+        # Aquí puedes agregar más código para formatear el estilo del texto si es necesario
+        # ...
+    ]
+
+    # Actualizar el documento agregando el texto transcribido
+    docs_service.documents().batchUpdate(documentId=document_id, body={'requests': requests}).execute()
+
+    print(f"Texto de '{audio_file}' agregado al documento con ID: {document_id}")
